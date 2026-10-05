@@ -112,6 +112,35 @@ class PortInfo:
             return full[:75] + ("..." if len(full) > 75 else "")
         return self.cmdline[:75]
 
+    @property
+    def is_system(self) -> bool:
+        if self.pid is None:
+            return True
+        system_users = {
+            "root",
+            "systemd-resolve",
+            "systemd-network",
+            "systemd-timesync",
+            "avahi",
+            "cups",
+            "nobody",
+            "daemon",
+            "messagebus",
+            "_apt",
+            "syslog",
+            "colord",
+            "geoclue",
+            "rtkit",
+        }
+        if self.user in system_users:
+            if self.container_name or self.name.lower() in ("docker-proxy", "nginx", "caddy", "apache2"):
+                return False
+            return True
+        if self.name.startswith("[Root"):
+            return True
+        return False
+
+
 
 @dataclass
 class KillReport:
@@ -119,7 +148,8 @@ class KillReport:
     pids_targeted: List[int]
     pids_killed: List[int]
     killed_process_names: List[str]
-    tree_killed: bool
-    success: bool
-    freed: bool
+    tree_killed: bool = False
+    success: bool = True
+    freed: bool = True
     error_message: str = ""
+

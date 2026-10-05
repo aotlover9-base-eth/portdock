@@ -81,6 +81,17 @@ def test_cmd_list_filters(capsys):
     captured = capsys.readouterr()
     assert "PORTDOCK" in captured.out
 
+    args_apps = parser.parse_args(["list", "--apps"])
+    cmd_list(args_apps)
+    captured = capsys.readouterr()
+    assert "PORTDOCK" in captured.out
+
+    args_sys = parser.parse_args(["list", "--system"])
+    cmd_list(args_sys)
+    captured = capsys.readouterr()
+    assert "PORTDOCK" in captured.out
+
+
 
 def test_cmd_dissect_free_port(capsys):
     cmd_dissect(59991)

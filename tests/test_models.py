@@ -71,3 +71,21 @@ def test_kill_report():
     assert report.freed is True
     assert len(report.pids_killed) == 2
     assert report.tree_killed is True
+
+
+def test_port_info_is_system():
+    p_user = PortInfo(port=3000, proto="tcp", bind_ip="127.0.0.1", bind_type=BindType.LOCAL, pid=123, name="node", user="aotlover9")
+    assert p_user.is_system is False
+
+    p_root = PortInfo(port=53, proto="udp", bind_ip="127.0.0.53", bind_type=BindType.LOCAL, pid=1024, name="systemd-resolved", user="root")
+    assert p_root.is_system is True
+
+    p_daemon = PortInfo(port=5353, proto="udp", bind_ip="0.0.0.0", bind_type=BindType.PUBLIC, pid=500, name="avahi-daemon", user="avahi")
+    assert p_daemon.is_system is True
+
+    p_docker = PortInfo(port=80, proto="tcp", bind_ip="0.0.0.0", bind_type=BindType.PUBLIC, pid=2000, name="docker-proxy", user="root", container_name="web-frontend")
+    assert p_docker.is_system is False
+
+    p_nginx = PortInfo(port=443, proto="tcp", bind_ip="0.0.0.0", bind_type=BindType.PUBLIC, pid=2001, name="nginx", user="root")
+    assert p_nginx.is_system is False
+

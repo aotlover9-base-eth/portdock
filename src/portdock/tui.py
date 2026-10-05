@@ -5,8 +5,9 @@ Interactive Rich Terminal TUI and visual formatters for portdock.
 from __future__ import annotations
 import os
 import select
+import shutil
 import sys
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from rich import box
 from rich.console import Console, Group
 from rich.layout import Layout
@@ -164,7 +165,7 @@ def render_port_detail_card(info: PortInfo, interactive: bool = False) -> Panel:
     actions_text.append("-> Force kill (immediate SIGKILL)\n", style="dim")
     content.append(actions_text)
 
-    subtitle = "[dim]Press \\[k] Kill | \\[t] Tree Kill | \\[q] or \\[Enter] Back[/dim]" if interactive else None
+    subtitle = "[dim]Press [k] Kill | [t] Tree Kill | [Esc / Enter] Back[/dim]" if interactive else None
 
     return Panel(
         Group(*content),
@@ -214,6 +215,7 @@ def render_kill_report(report: KillReport) -> Panel:
 def _read_key() -> str:
     """
     Read a single keypress in raw terminal mode on Linux/macOS.
+    Handles arrow keys, function keys, backspace, esc, enter, tab, and printable characters.
     """
     import termios
     import tty
@@ -240,9 +242,32 @@ def _read_key() -> str:
                         return "RIGHT"
                     elif ch3 == "D":
                         return "LEFT"
+                    elif ch3 == "H":
+                        return "HOME"
+                    elif ch3 == "F":
+                        return "END"
+                    elif ch3 in ("1", "4", "5", "6"):
+                        # Read trailing ~
+                        r2, _, _ = select.select([sys.stdin], [], [], 0.02)
+                        if r2:
+                            sys.stdin.read(1)
+                        if ch3 == "5":
+                            return "PAGE_UP"
+                        elif ch3 == "6":
+                            return "PAGE_DOWN"
+                        elif ch3 == "1":
+                            return "HOME"
+                        elif ch3 == "4":
+                            return "END"
             return "ESC"
         elif ch in ("\r", "\n"):
             return "ENTER"
+        elif ch == "\t":
+            return "TAB"
+        elif ch in ("\x7f", "\x08"):
+            return "BACKSPACE"
+        elif ch == " ":
+            return "SPACE"
         elif ch == "\x03":  # Ctrl+C
             return "CTRL_C"
         return ch
@@ -252,7 +277,8 @@ def _read_key() -> str:
 
 def run_interactive_tui(proto_filter: Optional[str] = None):
     """
-    Run the full-screen interactive TUI dashboard.
+    Run the full-screen interactive TUI dashboard with zero-flicker rendering,
+    intuitive controls, Dev/System socket toggle, and interactive search.
     """
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         # Fallback to static table if not interactive TTY
@@ -261,146 +287,336 @@ def run_interactive_tui(proto_filter: Optional[str] = None):
         console.print(tbl)
         return
 
-    from rich.live import Live
-
     filter_query = ""
+    is_searching = False
+    search_buffer = ""
+    show_system = False
     selected_idx = 0
+    scroll_offset = 0
     status_msg = ""
     inspect_port: Optional[int] = None
+    confirm_state: Optional[dict] = None
 
-    while True:
-        # Load fresh ports
-        all_ports = scan_listening_ports(proto_filter=proto_filter)
-        if filter_query:
-            q = filter_query.lower()
-            filtered_ports = [
-                p
-                for p in all_ports
-                if q in str(p.port)
-                or q in p.name.lower()
-                or q in p.bind_ip.lower()
-                or q in (p.user or "").lower()
-                or q in (p.container_name or "").lower()
-            ]
-        else:
-            filtered_ports = all_ports
+    # Switch to alternate screen buffer and hide cursor
+    sys.stdout.write("\x1b[?1049h\x1b[?25l")
+    sys.stdout.flush()
 
-        # Clamp selection index
-        if filtered_ports:
-            selected_idx = max(0, min(selected_idx, len(filtered_ports) - 1))
-        else:
-            selected_idx = 0
+    try:
+        while True:
+            # 1. Fetch current listening ports
+            all_ports = scan_listening_ports(proto_filter=proto_filter)
 
-        # Build UI layout
-        header_text = Text()
-        header_text.append("⚡ PORTDOCK ", style="bold cyan")
-        header_text.append(f"| Active: {len(all_ports)} ", style="bold white")
-        local_count = sum(1 for p in all_ports if p.bind_type == BindType.LOCAL)
-        pub_count = sum(1 for p in all_ports if p.bind_type == BindType.PUBLIC)
-        header_text.append(f"| Local: [green]{local_count}[/green] ", style="white")
-        header_text.append(f"| Public: [bold red]{pub_count}[/bold red] ", style="white")
-        if filter_query:
-            header_text.append(f"| Filter: '{filter_query}' ", style="bold yellow")
+            # Categorize
+            system_count = sum(1 for p in all_ports if p.is_system)
+            dev_ports = [p for p in all_ports if not p.is_system]
+            base_ports = all_ports if show_system else dev_ports
 
-        # Shortcuts footer
-        footer_text = Text()
-        footer_text.append("[↑/↓/j/k] Navigate  ", style="cyan")
-        footer_text.append("[Enter/d] Inspect  ", style="cyan")
-        footer_text.append("[k] Kill  ", style="bold red")
-        footer_text.append("[t] Tree Kill  ", style="bold yellow")
-        footer_text.append("[f] Filter  ", style="cyan")
-        footer_text.append("[r] Refresh  ", style="cyan")
-        footer_text.append("[q] Quit", style="white")
-
-        if inspect_port is not None:
-            details = get_port_details(inspect_port)
-            if details:
-                main_renderable = render_port_detail_card(details, interactive=True)
+            # Apply search filter
+            if filter_query:
+                q = filter_query.lower()
+                active_ports = [
+                    p
+                    for p in all_ports
+                    if q in str(p.port)
+                    or q in p.name.lower()
+                    or q in p.bind_ip.lower()
+                    or q in (p.user or "").lower()
+                    or q in (p.container_name or "").lower()
+                    or q in p.cmdline.lower()
+                ]
             else:
-                main_renderable = Panel(Text(f"Port {inspect_port} is no longer active.", style="red"))
-        else:
-            table = create_ports_table(
-                filtered_ports,
-                selected_idx=selected_idx,
-                filter_query=filter_query,
-            )
-            main_renderable = table
+                active_ports = base_ports
 
-        # Render screen
-        console.clear()
-        console.print(Panel(header_text, style="cyan", box=box.ROUNDED))
-        if status_msg:
-            console.print(f" {status_msg}\n")
-        console.print(main_renderable)
-        console.print(Panel(footer_text, style="dim", box=box.ROUNDED))
+            # Clamp selection
+            if active_ports:
+                selected_idx = max(0, min(selected_idx, len(active_ports) - 1))
+            else:
+                selected_idx = 0
 
-        # Wait for key
-        key = _read_key()
+            # 2. Window viewport calculation
+            term_size = shutil.get_terminal_size()
+            term_height = term_size.lines
+            term_width = term_size.columns
 
-        if key in ("q", "ESC", "CTRL_C"):
+            # Overhead lines: Header(3) + Banner(2-3) + Table Header(2) + Footer(3) + Margins(2) ~= 12
+            visible_rows = max(4, term_height - 12)
+
+            if selected_idx < scroll_offset:
+                scroll_offset = selected_idx
+            elif selected_idx >= scroll_offset + visible_rows:
+                scroll_offset = selected_idx - visible_rows + 1
+
+            max_offset = max(0, len(active_ports) - visible_rows)
+            scroll_offset = max(0, min(scroll_offset, max_offset))
+
+            windowed_ports = active_ports[scroll_offset : scroll_offset + visible_rows]
+
+            # 3. Build UI Components
+            local_count = sum(1 for p in all_ports if p.bind_type == BindType.LOCAL)
+            pub_count = sum(1 for p in all_ports if p.bind_type == BindType.PUBLIC)
+
+            header_text = Text()
+            header_text.append("⚡ PORTDOCK ", style="bold cyan")
+            header_text.append(f"• Total: {len(all_ports)} ", style="bold white")
+            header_text.append("• Local: ", style="white")
+            header_text.append(f"{local_count} ", style="bold green")
+            header_text.append("• Public: ", style="white")
+            header_text.append(f"{pub_count} ", style="bold red")
+
+            if filter_query:
+                header_text.append("• Filter: ", style="white")
+                header_text.append(f"'{filter_query}' ({len(active_ports)} matches) ", style="bold yellow")
+            elif not show_system:
+                header_text.append("• View: ", style="white")
+                header_text.append("Dev Apps Only ", style="bold green")
+                header_text.append(f"({system_count} system sockets hidden, [Tab] for All) ", style="dim")
+            else:
+                header_text.append("• View: ", style="white")
+                header_text.append("All Ports ", style="bold magenta")
+                header_text.append(f"([Tab] for Dev Apps) ", style="dim")
+
+            header_panel = Panel(header_text, style="cyan", box=box.ROUNDED)
+
+            # Banner / Confirmation / Search Bar
+            banner = None
+            if confirm_state is not None:
+                act = confirm_state["action"]
+                c_port = confirm_state["port"]
+                c_name = confirm_state["name"]
+                c_pid = confirm_state["pid"]
+                if act == "kill":
+                    banner = Panel(
+                        Text.from_markup(
+                            f"⚠️  [bold red]KILL PROCESS ON PORT :{c_port}?[/bold red]  "
+                            f"Process: [bold cyan]{c_name}[/bold cyan] (PID: [yellow]{c_pid or 'root'}[/yellow])\n"
+                            f"   [bold green][Enter] Confirm Kill[/bold green]    [dim][Esc / q] Cancel[/dim]"
+                        ),
+                        border_style="red",
+                        box=box.ROUNDED,
+                    )
+                else:
+                    banner = Panel(
+                        Text.from_markup(
+                            f"🌳 [bold yellow]PURGE PROCESS TREE ON PORT :{c_port}?[/bold yellow]  "
+                            f"Will terminate [bold cyan]{c_name}[/bold cyan] and all parent supervisors/child workers.\n"
+                            f"   [bold green][Enter] Confirm Tree Kill[/bold green]    [dim][Esc / q] Cancel[/dim]"
+                        ),
+                        border_style="yellow",
+                        box=box.ROUNDED,
+                    )
+            elif is_searching:
+                banner = Panel(
+                    Text.from_markup(
+                        f"🔍 [bold white]Search / Filter:[/bold white] [bold cyan]{search_buffer}[/bold cyan]█  "
+                        f"[dim](Type to search • [Enter] Keep • [Esc] Clear & Exit)[/dim]"
+                    ),
+                    border_style="cyan",
+                    box=box.ROUNDED,
+                )
+            elif status_msg:
+                banner = Text.from_markup(f"  {status_msg}")
+
+            # Main content: Inspector vs Table
+            scroll_indicator = None
             if inspect_port is not None:
-                inspect_port = None
-                status_msg = ""
-                continue
+                details = get_port_details(inspect_port)
+                if details:
+                    main_renderable = render_port_detail_card(details, interactive=True)
+                else:
+                    main_renderable = Panel(Text(f"Port {inspect_port} is no longer active.", style="red"))
             else:
+                if not active_ports:
+                    main_renderable = Panel(
+                        Text("No active listening ports match current view / filter.\nPress [Tab] to show system sockets or [/] to adjust search.", style="dim italic"),
+                        border_style="dim",
+                    )
+                else:
+                    selected_in_window = selected_idx - scroll_offset
+                    table = create_ports_table(
+                        windowed_ports,
+                        selected_idx=selected_in_window,
+                        filter_query=filter_query,
+                    )
+                    main_renderable = table
+
+                    # Scroll indicators
+                    scroll_parts = []
+                    if scroll_offset > 0:
+                        scroll_parts.append(f"▲ {scroll_offset} more above")
+                    if scroll_offset + len(windowed_ports) < len(active_ports):
+                        scroll_parts.append(f"▼ {len(active_ports) - (scroll_offset + len(windowed_ports))} more below")
+                    if scroll_parts:
+                        scroll_indicator = Text("  " + "  •  ".join(scroll_parts), style="dim italic")
+
+            # Footer
+            if inspect_port is not None:
+                footer_text = Text.from_markup(
+                    "[bold white][k][/bold white] Kill Port  •  "
+                    "[bold yellow][t][/bold yellow] Tree Kill  •  "
+                    "[bold cyan][Esc / Enter][/bold cyan] Back to Dashboard"
+                )
+            elif is_searching:
+                footer_text = Text.from_markup(
+                    "[bold cyan][Type][/bold cyan] Filter  •  "
+                    "[bold green][Enter][/bold green] Done  •  "
+                    "[bold dim][Esc][/bold dim] Clear  •  "
+                    "[bold cyan][↑/↓][/bold cyan] Navigate"
+                )
+            elif confirm_state is not None:
+                footer_text = Text.from_markup(
+                    "[bold green][Enter][/bold green] Confirm Action  •  "
+                    "[bold dim][Esc / q][/bold dim] Cancel"
+                )
+            else:
+                footer_text = Text.from_markup(
+                    "[bold cyan][↑/↓ or j/k][/bold cyan] Move  •  "
+                    "[bold cyan][Enter][/bold cyan] Inspect  •  "
+                    "[bold red][k][/bold red] Kill  •  "
+                    "[bold yellow][t][/bold yellow] Tree Kill  •  "
+                    "[bold magenta][Tab][/bold magenta] Dev/All  •  "
+                    "[bold cyan][/][/bold cyan] Search  •  "
+                    "[bold white][r][/bold white] Refresh  •  "
+                    "[bold white][q][/bold white] Quit"
+                )
+
+            footer_panel = Panel(footer_text, style="dim", box=box.ROUNDED)
+
+            # 4. Render entire frame into buffer and overwrite screen in 1 atomic draw (zero flicker!)
+            render_console = Console(width=term_width, color_system=console.color_system)
+            with render_console.capture() as capture:
+                render_console.print(header_panel)
+                if banner is not None:
+                    render_console.print(banner)
+                render_console.print(main_renderable)
+                if scroll_indicator is not None:
+                    render_console.print(scroll_indicator)
+                render_console.print(footer_panel)
+
+            frame = capture.get()
+            sys.stdout.write("\x1b[H" + frame + "\x1b[J")
+            sys.stdout.flush()
+
+            # 5. Read Key Input
+            key = _read_key()
+
+            # Handle Confirmation State
+            if confirm_state is not None:
+                if key == "ENTER":
+                    target_port = confirm_state["port"]
+                    act = confirm_state["action"]
+                    is_tree = (act == "tree_kill")
+                    report = terminate_port(target_port, force=False, kill_tree=is_tree)
+                    if report.freed:
+                        if is_tree:
+                            status_msg = f"[bold green]✔ Tree killed port :{target_port} (purged {len(report.killed_pids)} processes)[/bold green]"
+                        else:
+                            status_msg = f"[bold green]✔ Successfully freed port :{target_port}[/bold green]"
+                    else:
+                        status_msg = f"[bold red]✖ Failed to free port :{target_port}: {report.error_message}[/bold red]"
+                    confirm_state = None
+                    inspect_port = None
+                elif key in ("ESC", "q", "n", "CTRL_C"):
+                    confirm_state = None
+                    status_msg = "[dim]Cancelled.[/dim]"
+                continue
+
+            # Handle Search Mode Input
+            if is_searching:
+                if key == "ENTER":
+                    filter_query = search_buffer
+                    is_searching = False
+                    status_msg = f"[dim]Filtered by '{filter_query}'[/dim]" if filter_query else ""
+                elif key == "ESC":
+                    filter_query = ""
+                    search_buffer = ""
+                    is_searching = False
+                    status_msg = "[dim]Filter cleared.[/dim]"
+                elif key == "BACKSPACE":
+                    search_buffer = search_buffer[:-1]
+                    filter_query = search_buffer
+                    selected_idx = 0
+                elif key in ("UP",):
+                    selected_idx = max(0, selected_idx - 1)
+                elif key in ("DOWN",):
+                    if active_ports:
+                        selected_idx = min(len(active_ports) - 1, selected_idx + 1)
+                elif key == "CTRL_C":
+                    break
+                elif len(key) == 1 and key.isprintable():
+                    search_buffer += key
+                    filter_query = search_buffer
+                    selected_idx = 0
+                continue
+
+            # Handle Inspector Mode Input
+            if inspect_port is not None:
+                if key in ("q", "ESC", "ENTER", "d"):
+                    inspect_port = None
+                    status_msg = ""
+                elif key == "k":
+                    target_info = get_port_details(inspect_port)
+                    if target_info:
+                        confirm_state = {"action": "kill", "port": target_info.port, "name": target_info.name, "pid": target_info.pid}
+                    else:
+                        status_msg = f"[bold red]Port :{inspect_port} is no longer active.[/bold red]"
+                        inspect_port = None
+                elif key == "t":
+                    target_info = get_port_details(inspect_port)
+                    if target_info:
+                        confirm_state = {"action": "tree_kill", "port": target_info.port, "name": target_info.name, "pid": target_info.pid}
+                    else:
+                        status_msg = f"[bold red]Port :{inspect_port} is no longer active.[/bold red]"
+                        inspect_port = None
+                continue
+
+            # Normal List Navigation
+            if key in ("q", "CTRL_C"):
                 break
-
-        if inspect_port is not None:
-            if key in ("ENTER", "d"):
-                inspect_port = None
+            elif key in ("UP", "k"):
+                selected_idx = max(0, selected_idx - 1)
                 status_msg = ""
+            elif key in ("DOWN", "j"):
+                if active_ports:
+                    selected_idx = min(len(active_ports) - 1, selected_idx + 1)
+                status_msg = ""
+            elif key in ("PAGE_UP", "b"):
+                selected_idx = max(0, selected_idx - visible_rows)
+                status_msg = ""
+            elif key in ("PAGE_DOWN", "SPACE"):
+                if active_ports:
+                    selected_idx = min(len(active_ports) - 1, selected_idx + visible_rows)
+                status_msg = ""
+            elif key == "HOME":
+                selected_idx = 0
+                status_msg = ""
+            elif key == "END":
+                if active_ports:
+                    selected_idx = len(active_ports) - 1
+                status_msg = ""
+            elif key == "TAB":
+                show_system = not show_system
+                selected_idx = 0
+                scroll_offset = 0
+                status_msg = "[cyan]Showing all system ports[/cyan]" if show_system else "[cyan]Showing developer apps only[/cyan]"
+            elif key in ("/", "f"):
+                is_searching = True
+                search_buffer = filter_query
+            elif key in ("ENTER", "d", "i"):
+                if active_ports:
+                    inspect_port = active_ports[selected_idx].port
+                    status_msg = ""
             elif key == "k":
-                report = terminate_port(inspect_port, force=False, kill_tree=False)
-                if report.freed:
-                    status_msg = f"[bold green]Killed port {inspect_port}[/bold green]"
-                else:
-                    status_msg = f"[bold red]Failed to free port {inspect_port}: {report.error_message}[/bold red]"
-                inspect_port = None
+                if active_ports:
+                    target = active_ports[selected_idx]
+                    confirm_state = {"action": "kill", "port": target.port, "name": target.name, "pid": target.pid}
             elif key == "t":
-                report = terminate_port(inspect_port, force=False, kill_tree=True)
-                if report.freed:
-                    status_msg = f"[bold green]Tree killed port {inspect_port} (purged {len(report.killed_pids)} processes)[/bold green]"
-                else:
-                    status_msg = f"[bold red]Tree kill failed for port {inspect_port}: {report.error_message}[/bold red]"
-                inspect_port = None
-            continue
+                if active_ports:
+                    target = active_ports[selected_idx]
+                    confirm_state = {"action": "tree_kill", "port": target.port, "name": target.name, "pid": target.pid}
+            elif key == "r":
+                status_msg = "[green]Refreshed.[/green]"
 
-        if key in ("UP", "k"):
-            selected_idx = max(0, selected_idx - 1)
-            status_msg = ""
-        elif key in ("DOWN", "j"):
-            if filtered_ports:
-                selected_idx = min(len(filtered_ports) - 1, selected_idx + 1)
-            status_msg = ""
-        elif key in ("ENTER", "d"):
-            if filtered_ports:
-                inspect_port = filtered_ports[selected_idx].port
-                status_msg = ""
-        elif key == "r":
-            status_msg = "[green]Refreshed.[/green]"
-        elif key == "f":
-            # Prompt for filter
-            console.print("\n[bold yellow]Enter filter query (press Enter to apply, empty to clear):[/bold yellow]")
-            try:
-                filter_query = input("> ").strip()
-                status_msg = f"Filter set to: '{filter_query}'" if filter_query else "Filter cleared."
-            except (EOFError, KeyboardInterrupt):
-                pass
-        elif key == "k":
-            # Quick Kill
-            if filtered_ports:
-                target = filtered_ports[selected_idx]
-                report = terminate_port(target.port, force=False, kill_tree=False)
-                if report.freed:
-                    status_msg = f"[bold green]Killed port {target.port} ({target.name})[/bold green]"
-                else:
-                    status_msg = f"[bold red]Failed to free port {target.port}: {report.error_message}[/bold red]"
-        elif key == "t":
-            # Tree Kill
-            if filtered_ports:
-                target = filtered_ports[selected_idx]
-                report = terminate_port(target.port, force=False, kill_tree=True)
-                if report.freed:
-                    status_msg = f"[bold green]Tree killed port {target.port} (purged {len(report.killed_pids)} processes)[/bold green]"
-                else:
-                    status_msg = f"[bold red]Tree kill failed for port {target.port}: {report.error_message}[/bold red]"
+    finally:
+        # Restore normal terminal screen buffer and show cursor
+        sys.stdout.write("\x1b[?1049l\x1b[?25h")
+        sys.stdout.flush()

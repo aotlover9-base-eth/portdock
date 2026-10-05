@@ -74,6 +74,12 @@ def cmd_list(args):
     elif args.public and not args.local:
         ports = [p for p in ports if p.bind_type == BindType.PUBLIC]
 
+    if getattr(args, "apps", False) and not getattr(args, "system", False):
+        ports = [p for p in ports if not p.is_system]
+    elif getattr(args, "system", False) and not getattr(args, "apps", False):
+        ports = [p for p in ports if p.is_system]
+
+
     if args.json:
         data = [
             {
@@ -213,6 +219,8 @@ Examples:
     list_p.add_argument("--udp", action="store_true", help="Filter UDP sockets only")
     list_p.add_argument("--local", action="store_true", help="Filter localhost sockets only (127.0.0.1)")
     list_p.add_argument("--public", action="store_true", help="Filter public sockets only (0.0.0.0)")
+    list_p.add_argument("--apps", action="store_true", help="Filter developer & user applications only (hide OS daemons)")
+    list_p.add_argument("--system", action="store_true", help="Filter OS & system background daemons only")
     list_p.add_argument("--json", action="store_true", help="Output machine-readable JSON")
 
     # kill subcommand (also aliased by free)
