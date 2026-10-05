@@ -4,11 +4,7 @@
 > *Day 6 of 100 Days, 100 Problems, 100 Solutions*
 
 <div align="center">
-  <img src="assets/day_006_card.jpg" alt="portdock Day 006 Feature Card" width="620" />
-</div>
-
-<div align="center">
-  <img src="assets/preview.png" alt="portdock terminal dashboard" width="620" />
+  <img src="assets/preview.png" alt="portdock interactive terminal dashboard" width="720" />
 </div>
 
 ```bash
@@ -123,6 +119,12 @@ To prevent catastrophic accidental kills, `portdock` enforces guard boundaries:
 - **PID Protection**: Never terminates `portdock` itself or its parent shell.
 - **Terminal & IDE Protection**: Shields active IDE instances (VS Code, Cursor, Antigravity) and test runners (pytest).
 - **System Daemon Isolation**: 30+ root OS sockets (`systemd-resolved`, `cupsd`, `avahi-daemon`) are categorized and tucked under the `[Tab]` toggle.
+
+---
+
+<div align="center">
+  <img src="assets/day_006_card.jpg" alt="portdock Day 006 Feature Card" width="600" />
+</div>
 
 ---
 
