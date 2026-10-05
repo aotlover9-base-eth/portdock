@@ -215,7 +215,8 @@ def render_kill_report(report: KillReport) -> Panel:
 def _read_key() -> str:
     """
     Read a single keypress in raw terminal mode on Linux/macOS.
-    Handles arrow keys, function keys, backspace, esc, enter, tab, and printable characters.
+    Uses unbuffered os.read directly on stdin file descriptor to prevent
+    escape sequences from being fragmented or swallowed by TextIOWrapper buffering.
     """
     import termios
     import tty
@@ -224,53 +225,58 @@ def _read_key() -> str:
     old_settings = termios.tcgetattr(fd)
     try:
         tty.setraw(fd)
-        ch = sys.stdin.read(1)
-        if not ch or ch == "\x04":  # EOF or Ctrl+D
+        data = os.read(fd, 32)
+        if not data or data == b"\x04":  # EOF or Ctrl+D
             return "q"
-        if ch == "\x1b":
-            # Check for escape sequences
-            r, _, _ = select.select([sys.stdin], [], [], 0.05)
-            if r:
-                ch2 = sys.stdin.read(1)
-                if ch2 == "[":
-                    ch3 = sys.stdin.read(1)
-                    if ch3 == "A":
-                        return "UP"
-                    elif ch3 == "B":
-                        return "DOWN"
-                    elif ch3 == "C":
-                        return "RIGHT"
-                    elif ch3 == "D":
-                        return "LEFT"
-                    elif ch3 == "H":
-                        return "HOME"
-                    elif ch3 == "F":
-                        return "END"
-                    elif ch3 in ("1", "4", "5", "6"):
-                        # Read trailing ~
-                        r2, _, _ = select.select([sys.stdin], [], [], 0.02)
-                        if r2:
-                            sys.stdin.read(1)
-                        if ch3 == "5":
-                            return "PAGE_UP"
-                        elif ch3 == "6":
-                            return "PAGE_DOWN"
-                        elif ch3 == "1":
-                            return "HOME"
-                        elif ch3 == "4":
-                            return "END"
-            return "ESC"
-        elif ch in ("\r", "\n"):
-            return "ENTER"
-        elif ch == "\t":
-            return "TAB"
-        elif ch in ("\x7f", "\x08"):
-            return "BACKSPACE"
-        elif ch == " ":
-            return "SPACE"
-        elif ch == "\x03":  # Ctrl+C
+        if data == b"\x03":  # Ctrl+C
             return "CTRL_C"
-        return ch
+        if data in (b"\r", b"\n"):
+            return "ENTER"
+        if data == b"\t":
+            return "TAB"
+        if data in (b"\x7f", b"\x08"):
+            return "BACKSPACE"
+        if data == b" ":
+            return "SPACE"
+
+        # Check for escape sequences
+        if data == b"\x1b":
+            # If lone ESC, wait a tiny bit (25ms) in case the rest of the sequence is in flight
+            r, _, _ = select.select([fd], [], [], 0.025)
+            if r:
+                data += os.read(fd, 31)
+
+        if data == b"\x1b":
+            return "ESC"
+
+        # Arrow keys (ANSI and Application Cursor SS3 mode)
+        if data in (b"\x1b[A", b"\x1bOA"):
+            return "UP"
+        if data in (b"\x1b[B", b"\x1bOB"):
+            return "DOWN"
+        if data in (b"\x1b[C", b"\x1bOC"):
+            return "RIGHT"
+        if data in (b"\x1b[D", b"\x1bOD"):
+            return "LEFT"
+
+        # Home / End / Page navigation
+        if data in (b"\x1b[H", b"\x1b[1~", b"\x1bOH"):
+            return "HOME"
+        if data in (b"\x1b[F", b"\x1b[4~", b"\x1bOF"):
+            return "END"
+        if data in (b"\x1b[5~", b"\x1b[[5~"):
+            return "PAGE_UP"
+        if data in (b"\x1b[6~", b"\x1b[[6~"):
+            return "PAGE_DOWN"
+
+        # Any unhandled escape sequence fallback
+        if data.startswith(b"\x1b"):
+            return "ESC"
+
+        try:
+            return data.decode("utf-8", errors="ignore")
+        except Exception:
+            return ""
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
