@@ -356,7 +356,7 @@ def run_interactive_tui(proto_filter: Optional[str] = None):
             pub_count = sum(1 for p in all_ports if p.bind_type == BindType.PUBLIC)
 
             header_text = Text()
-            header_text.append("⚡ PORTDOCK ", style="bold cyan")
+            header_text.append("PORTDOCK ", style="bold cyan")
             header_text.append(f"• Total: {len(all_ports)} ", style="bold white")
             header_text.append("• Local: ", style="white")
             header_text.append(f"{local_count} ", style="bold green")
@@ -385,36 +385,26 @@ def run_interactive_tui(proto_filter: Optional[str] = None):
                 c_name = confirm_state["name"]
                 c_pid = confirm_state["pid"]
                 if act == "kill":
-                    banner = Panel(
-                        Text.from_markup(
-                            f"⚠️  [bold red]KILL PROCESS ON PORT :{c_port}?[/bold red]  "
-                            f"Process: [bold cyan]{c_name}[/bold cyan] (PID: [yellow]{c_pid or 'root'}[/yellow])\n"
-                            f"   [bold green][Enter] Confirm Kill[/bold green]    [dim][Esc / q] Cancel[/dim]"
-                        ),
-                        border_style="red",
-                        box=box.ROUNDED,
-                    )
+                    t = Text()
+                    t.append(f"[!] KILL PROCESS ON PORT :{c_port}?\n", style="bold red")
+                    t.append(f"    Process: {c_name} (PID: {c_pid or 'root'})\n", style="bold cyan")
+                    t.append("    [Enter] Confirm Kill    [Esc / q] Cancel", style="bold green")
+                    banner = Panel(t, border_style="red", box=box.ROUNDED)
                 else:
-                    banner = Panel(
-                        Text.from_markup(
-                            f"🌳 [bold yellow]PURGE PROCESS TREE ON PORT :{c_port}?[/bold yellow]  "
-                            f"Will terminate [bold cyan]{c_name}[/bold cyan] and all parent supervisors/child workers.\n"
-                            f"   [bold green][Enter] Confirm Tree Kill[/bold green]    [dim][Esc / q] Cancel[/dim]"
-                        ),
-                        border_style="yellow",
-                        box=box.ROUNDED,
-                    )
+                    t = Text()
+                    t.append(f"[TREE] PURGE PROCESS TREE ON PORT :{c_port}?\n", style="bold yellow")
+                    t.append(f"    Terminates '{c_name}' and all parent supervisors/child workers.\n", style="bold cyan")
+                    t.append("    [Enter] Confirm Tree Kill    [Esc / q] Cancel", style="bold green")
+                    banner = Panel(t, border_style="yellow", box=box.ROUNDED)
             elif is_searching:
-                banner = Panel(
-                    Text.from_markup(
-                        f"🔍 [bold white]Search / Filter:[/bold white] [bold cyan]{search_buffer}[/bold cyan]█  "
-                        f"[dim](Type to search • [Enter] Keep • [Esc] Clear & Exit)[/dim]"
-                    ),
-                    border_style="cyan",
-                    box=box.ROUNDED,
-                )
+                t = Text()
+                t.append("Search / Filter: ", style="bold white")
+                t.append(f"{search_buffer}█  ", style="bold cyan")
+                t.append("([Type] Search • [Enter] Keep • [Esc] Clear & Exit)", style="dim")
+                banner = Panel(t, border_style="cyan", box=box.ROUNDED)
             elif status_msg:
-                banner = Text.from_markup(f"  {status_msg}")
+                banner_style = "bold green" if ("freed" in status_msg or "Tree killed" in status_msg) else ("bold red" if "Failed" in status_msg else "cyan")
+                banner = Text(f"  {status_msg}", style=banner_style)
 
             # Main content: Inspector vs Table
             scroll_indicator = None
@@ -450,34 +440,47 @@ def run_interactive_tui(proto_filter: Optional[str] = None):
 
             # Footer
             if inspect_port is not None:
-                footer_text = Text.from_markup(
-                    "[bold white][k][/bold white] Kill Port  •  "
-                    "[bold yellow][t][/bold yellow] Tree Kill  •  "
-                    "[bold cyan][Esc / Enter][/bold cyan] Back to Dashboard"
-                )
+                footer_text = Text()
+                footer_text.append("[k] ", style="bold white")
+                footer_text.append("Kill Port  •  ", style="white")
+                footer_text.append("[t] ", style="bold yellow")
+                footer_text.append("Tree Kill  •  ", style="white")
+                footer_text.append("[Esc / Enter] ", style="bold cyan")
+                footer_text.append("Back to Dashboard", style="white")
             elif is_searching:
-                footer_text = Text.from_markup(
-                    "[bold cyan][Type][/bold cyan] Filter  •  "
-                    "[bold green][Enter][/bold green] Done  •  "
-                    "[bold dim][Esc][/bold dim] Clear  •  "
-                    "[bold cyan][↑/↓][/bold cyan] Navigate"
-                )
+                footer_text = Text()
+                footer_text.append("[Type] ", style="bold cyan")
+                footer_text.append("Filter  •  ", style="white")
+                footer_text.append("[Enter] ", style="bold green")
+                footer_text.append("Done  •  ", style="white")
+                footer_text.append("[Esc] ", style="bold dim")
+                footer_text.append("Clear  •  ", style="white")
+                footer_text.append("[↑/↓] ", style="bold cyan")
+                footer_text.append("Navigate", style="white")
             elif confirm_state is not None:
-                footer_text = Text.from_markup(
-                    "[bold green][Enter][/bold green] Confirm Action  •  "
-                    "[bold dim][Esc / q][/bold dim] Cancel"
-                )
+                footer_text = Text()
+                footer_text.append("[Enter] ", style="bold green")
+                footer_text.append("Confirm Action  •  ", style="white")
+                footer_text.append("[Esc / q] ", style="bold dim")
+                footer_text.append("Cancel", style="white")
             else:
-                footer_text = Text.from_markup(
-                    "[bold cyan][↑/↓ or j/k][/bold cyan] Move  •  "
-                    "[bold cyan][Enter][/bold cyan] Inspect  •  "
-                    "[bold red][k][/bold red] Kill  •  "
-                    "[bold yellow][t][/bold yellow] Tree Kill  •  "
-                    "[bold magenta][Tab][/bold magenta] Dev/All  •  "
-                    "[bold cyan][/][/bold cyan] Search  •  "
-                    "[bold white][r][/bold white] Refresh  •  "
-                    "[bold white][q][/bold white] Quit"
-                )
+                footer_text = Text()
+                footer_text.append("[↑/↓ or j/k] ", style="bold cyan")
+                footer_text.append("Move  •  ", style="white")
+                footer_text.append("[Enter] ", style="bold cyan")
+                footer_text.append("Inspect  •  ", style="white")
+                footer_text.append("[k] ", style="bold red")
+                footer_text.append("Kill  •  ", style="white")
+                footer_text.append("[t] ", style="bold yellow")
+                footer_text.append("Tree Kill  •  ", style="white")
+                footer_text.append("[Tab] ", style="bold magenta")
+                footer_text.append("Dev/All  •  ", style="white")
+                footer_text.append("[/] ", style="bold cyan")
+                footer_text.append("Search  •  ", style="white")
+                footer_text.append("[r] ", style="bold white")
+                footer_text.append("Refresh  •  ", style="white")
+                footer_text.append("[q] ", style="bold white")
+                footer_text.append("Quit", style="white")
 
             footer_panel = Panel(footer_text, style="dim", box=box.ROUNDED)
 
@@ -508,16 +511,16 @@ def run_interactive_tui(proto_filter: Optional[str] = None):
                     report = terminate_port(target_port, force=False, kill_tree=is_tree)
                     if report.freed:
                         if is_tree:
-                            status_msg = f"[bold green]✔ Tree killed port :{target_port} (purged {len(report.killed_pids)} processes)[/bold green]"
+                            status_msg = f"Tree killed port :{target_port} (purged {len(report.killed_pids)} processes)"
                         else:
-                            status_msg = f"[bold green]✔ Successfully freed port :{target_port}[/bold green]"
+                            status_msg = f"Successfully freed port :{target_port}"
                     else:
-                        status_msg = f"[bold red]✖ Failed to free port :{target_port}: {report.error_message}[/bold red]"
+                        status_msg = f"Failed to free port :{target_port}: {report.error_message}"
                     confirm_state = None
                     inspect_port = None
                 elif key in ("ESC", "q", "n", "CTRL_C"):
                     confirm_state = None
-                    status_msg = "[dim]Cancelled.[/dim]"
+                    status_msg = "Cancelled."
                 continue
 
             # Handle Search Mode Input
@@ -525,12 +528,12 @@ def run_interactive_tui(proto_filter: Optional[str] = None):
                 if key == "ENTER":
                     filter_query = search_buffer
                     is_searching = False
-                    status_msg = f"[dim]Filtered by '{filter_query}'[/dim]" if filter_query else ""
+                    status_msg = f"Filtered by '{filter_query}'" if filter_query else ""
                 elif key == "ESC":
                     filter_query = ""
                     search_buffer = ""
                     is_searching = False
-                    status_msg = "[dim]Filter cleared.[/dim]"
+                    status_msg = "Filter cleared."
                 elif key == "BACKSPACE":
                     search_buffer = search_buffer[:-1]
                     filter_query = search_buffer
@@ -558,14 +561,14 @@ def run_interactive_tui(proto_filter: Optional[str] = None):
                     if target_info:
                         confirm_state = {"action": "kill", "port": target_info.port, "name": target_info.name, "pid": target_info.pid}
                     else:
-                        status_msg = f"[bold red]Port :{inspect_port} is no longer active.[/bold red]"
+                        status_msg = f"Port :{inspect_port} is no longer active."
                         inspect_port = None
                 elif key == "t":
                     target_info = get_port_details(inspect_port)
                     if target_info:
                         confirm_state = {"action": "tree_kill", "port": target_info.port, "name": target_info.name, "pid": target_info.pid}
                     else:
-                        status_msg = f"[bold red]Port :{inspect_port} is no longer active.[/bold red]"
+                        status_msg = f"Port :{inspect_port} is no longer active."
                         inspect_port = None
                 continue
 
@@ -597,7 +600,7 @@ def run_interactive_tui(proto_filter: Optional[str] = None):
                 show_system = not show_system
                 selected_idx = 0
                 scroll_offset = 0
-                status_msg = "[cyan]Showing all system ports[/cyan]" if show_system else "[cyan]Showing developer apps only[/cyan]"
+                status_msg = "Showing all system ports" if show_system else "Showing developer apps only"
             elif key in ("/", "f"):
                 is_searching = True
                 search_buffer = filter_query
@@ -614,7 +617,7 @@ def run_interactive_tui(proto_filter: Optional[str] = None):
                     target = active_ports[selected_idx]
                     confirm_state = {"action": "tree_kill", "port": target.port, "name": target.name, "pid": target.pid}
             elif key == "r":
-                status_msg = "[green]Refreshed.[/green]"
+                status_msg = "Refreshed."
 
     finally:
         # Restore normal terminal screen buffer and show cursor
