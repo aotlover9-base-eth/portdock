@@ -164,7 +164,7 @@ def render_port_detail_card(info: PortInfo, interactive: bool = False) -> Panel:
     actions_text.append("-> Force kill (immediate SIGKILL)\n", style="dim")
     content.append(actions_text)
 
-    subtitle = "[dim]Press \\[q] or \\[Enter] to return[/dim]" if interactive else None
+    subtitle = "[dim]Press \\[k] Kill | \\[t] Tree Kill | \\[q] or \\[Enter] Back[/dim]" if interactive else None
 
     return Panel(
         Group(*content),
@@ -349,6 +349,20 @@ def run_interactive_tui(proto_filter: Optional[str] = None):
             if key in ("ENTER", "d"):
                 inspect_port = None
                 status_msg = ""
+            elif key == "k":
+                report = terminate_port(inspect_port, force=False, kill_tree=False)
+                if report.freed:
+                    status_msg = f"[bold green]Killed port {inspect_port}[/bold green]"
+                else:
+                    status_msg = f"[bold red]Failed to free port {inspect_port}: {report.error_message}[/bold red]"
+                inspect_port = None
+            elif key == "t":
+                report = terminate_port(inspect_port, force=False, kill_tree=True)
+                if report.freed:
+                    status_msg = f"[bold green]Tree killed port {inspect_port} (purged {len(report.killed_pids)} processes)[/bold green]"
+                else:
+                    status_msg = f"[bold red]Tree kill failed for port {inspect_port}: {report.error_message}[/bold red]"
+                inspect_port = None
             continue
 
         if key in ("UP", "k"):

@@ -20,6 +20,7 @@ from .scanner import get_port_details, is_port_free, scan_listening_ports
 from .tui import create_ports_table, render_kill_report, render_port_detail_card, run_interactive_tui
 
 console = Console()
+err_console = Console(stderr=True)
 
 
 def parse_port(arg: str) -> int:
@@ -126,7 +127,7 @@ def cmd_kill(args):
         try:
             ports_to_kill.append(parse_port(item))
         except ValueError as e:
-            console.print(f"[bold red]Error:[/bold red] {e}", file=sys.stderr)
+            err_console.print(f"[bold red]Error:[/bold red] {e}")
             sys.exit(1)
 
     all_freed = True
@@ -154,7 +155,7 @@ def cmd_wait(args):
     try:
         port_num = parse_port(args.port)
     except ValueError as e:
-        console.print(f"[bold red]Error:[/bold red] {e}", file=sys.stderr)
+        err_console.print(f"[bold red]Error:[/bold red] {e}")
         sys.exit(1)
 
     timeout = args.timeout
@@ -181,7 +182,7 @@ def cmd_wait(args):
                 sys.exit(0)
         time.sleep(interval)
 
-    console.print(f"[bold red]✗ Timed out waiting for port {port_num} to become {target_state}[/bold red]", file=sys.stderr)
+    err_console.print(f"[bold red]✗ Timed out waiting for port {port_num} to become {target_state}[/bold red]")
     sys.exit(1)
 
 
@@ -241,15 +242,12 @@ Examples:
 def main():
     # If first arg looks like a port number or :port, route directly to dissect
     if len(sys.argv) > 1 and sys.argv[1] not in ("-h", "--help", "-v", "--version", "list", "kill", "free", "wait", "dissect", "inspect"):
-        candidate = sys.argv[1].lstrip(":")
-        if candidate.isdigit():
-            try:
-                port_num = parse_port(sys.argv[1])
-                cmd_dissect(port_num)
-                return
-            except ValueError as e:
-                console.print(f"[bold red]Error:[/bold red] {e}", file=sys.stderr)
-                sys.exit(1)
+        try:
+            port_num = parse_port(sys.argv[1])
+            cmd_dissect(port_num)
+            return
+        except ValueError:
+            pass
 
     parser = build_parser()
     args = parser.parse_args()
@@ -263,7 +261,7 @@ def main():
             port_num = parse_port(args.port)
             cmd_dissect(port_num, proto=args.proto)
         except ValueError as e:
-            console.print(f"[bold red]Error:[/bold red] {e}", file=sys.stderr)
+            err_console.print(f"[bold red]Error:[/bold red] {e}")
             sys.exit(1)
     elif args.subcommand == "wait":
         cmd_wait(args)

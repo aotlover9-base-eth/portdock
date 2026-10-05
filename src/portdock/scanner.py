@@ -3,6 +3,7 @@ Port scanner and process tree inspector for portdock.
 """
 
 from __future__ import annotations
+import errno
 import os
 import shutil
 import socket
@@ -157,13 +158,6 @@ def get_supervisor_chain(proc: psutil.Process) -> str:
 
     return " -> ".join(chain_parts) if chain_parts else f"{proc.pid}"
 
-    try:
-        chain_parts.append(f"{proc.name()} ({proc.pid})")
-    except (psutil.NoSuchProcess, psutil.AccessDenied):
-        chain_parts.append(f"PID {proc.pid}")
-
-    return " -> ".join(chain_parts) if chain_parts else f"{proc.pid}"
-
 
 def build_process_tree(proc: psutil.Process) -> ProcessTreeNode:
     """
@@ -171,17 +165,33 @@ def build_process_tree(proc: psutil.Process) -> ProcessTreeNode:
     """
     try:
         pid = proc.pid
+    except Exception:
+        pid = 0
+
+    try:
         name = proc.name()
+    except Exception:
+        name = f"PID {pid}" if pid else "<terminated>"
+
+    try:
         cmdline = " ".join(proc.cmdline())
+    except Exception:
+        cmdline = ""
+
+    try:
         user = proc.username()
+    except Exception:
+        user = ""
+
+    try:
         mem = proc.memory_info().rss / (1024 * 1024)
+    except Exception:
+        mem = 0.0
+
+    try:
         cpu = proc.cpu_percent(interval=0.0)
-    except (psutil.NoSuchProcess, psutil.AccessDenied):
-        return ProcessTreeNode(
-            pid=proc.pid if hasattr(proc, "pid") else 0,
-            name="<terminated>",
-            cmdline="",
-        )
+    except Exception:
+        cpu = 0.0
 
     children_nodes: List[ProcessTreeNode] = []
     try:
@@ -238,26 +248,79 @@ def get_docker_container(port: int) -> Optional[str]:
 def is_port_free(port: int, proto: str = "tcp") -> bool:
     """
     Verify whether a port is released and available for binding.
+    Handles non-root privileged ports (<1024) and non-blocking probes.
     """
     clean_proto = proto.lower()
+
+    # Check if psutil sees an active listener
+    try:
+        conns = psutil.net_connections(kind="inet")
+        for c in conns:
+            if c.laddr and getattr(c.laddr, "port", None) == port:
+                if clean_proto == "tcp" and c.status == psutil.CONN_LISTEN:
+                    return False
+                elif clean_proto == "udp":
+                    return False
+    except (psutil.AccessDenied, PermissionError):
+        pass
+
     if clean_proto == "tcp":
-        # Check both IPv4 0.0.0.0 and 127.0.0.1
         for host in ("0.0.0.0", "127.0.0.1"):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     s.bind((host, port))
-            except OSError:
-                return False
+            except OSError as err:
+                if err.errno == errno.EACCES:
+                    # Non-root permission denied on privileged port (<1024). Probe with connect.
+                    try:
+                        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                            probe.settimeout(0.05)
+                            probe.connect(("127.0.0.1", port))
+                            return False  # Successfully connected -> active socket
+                    except OSError as probe_err:
+                        if probe_err.errno in (errno.ECONNREFUSED, errno.ENETUNREACH, errno.ETIMEDOUT):
+                            continue
+                        return False
+                elif err.errno == errno.EADDRINUSE:
+                    return False
+                else:
+                    return False
         return True
     else:
         for host in ("0.0.0.0", "127.0.0.1"):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                     s.bind((host, port))
-            except OSError:
+            except OSError as err:
+                if err.errno == errno.EACCES:
+                    continue
                 return False
         return True
+
+
+def get_pids_for_port(port: int, proto: str = "tcp") -> List[int]:
+    """Return all PIDs associated with listening sockets on the specified port."""
+    pids: Set[int] = set()
+    clean_proto = proto.lower()
+    kind = "inet"
+    if clean_proto == "tcp":
+        kind = "tcp"
+    elif clean_proto == "udp":
+        kind = "udp"
+
+    try:
+        conns = psutil.net_connections(kind=kind)
+        for c in conns:
+            if c.laddr and getattr(c.laddr, "port", None) == port:
+                if clean_proto == "tcp" and c.status != psutil.CONN_LISTEN:
+                    continue
+                if c.pid is not None:
+                    pids.add(c.pid)
+    except (psutil.AccessDenied, PermissionError):
+        pass
+
+    return sorted(pids)
 
 
 def scan_listening_ports(proto_filter: Optional[str] = None) -> List[PortInfo]:
@@ -323,16 +386,40 @@ def scan_listening_ports(proto_filter: Optional[str] = None) -> List[PortInfo]:
         if pid is not None:
             try:
                 proc = psutil.Process(pid)
-                name = proc.name()
-                cmdline = " ".join(proc.cmdline())
-                user = proc.username()
-                cwd = proc.cwd()
-                created_time = proc.create_time()
-                mem_info = proc.memory_info()
-                memory_mb = mem_info.rss / (1024 * 1024)
-                cpu_percent = proc.cpu_percent(interval=0.0)
-                chain = get_supervisor_chain(proc)
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                try:
+                    name = proc.name()
+                except Exception:
+                    name = f"PID {pid}"
+                try:
+                    cmdline = " ".join(proc.cmdline())
+                except Exception:
+                    cmdline = ""
+                try:
+                    user = proc.username()
+                except Exception:
+                    user = ""
+                try:
+                    cwd = proc.cwd()
+                except Exception:
+                    cwd = ""
+                try:
+                    created_time = proc.create_time()
+                except Exception:
+                    created_time = 0.0
+                try:
+                    mem_info = proc.memory_info()
+                    memory_mb = mem_info.rss / (1024 * 1024)
+                except Exception:
+                    memory_mb = 0.0
+                try:
+                    cpu_percent = proc.cpu_percent(interval=0.0)
+                except Exception:
+                    cpu_percent = 0.0
+                try:
+                    chain = get_supervisor_chain(proc)
+                except Exception:
+                    chain = ""
+            except (psutil.NoSuchProcess, psutil.ZombieProcess):
                 name = "<process exited>"
         else:
             name = "[Root / System]"

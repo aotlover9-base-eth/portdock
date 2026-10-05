@@ -1,7 +1,8 @@
 import argparse
 import json
+import sys
 import pytest
-from portdock.cli import build_parser, cmd_dissect, cmd_kill, cmd_list, parse_port
+from portdock.cli import build_parser, cmd_dissect, cmd_kill, cmd_list, cmd_wait, main, parse_port
 
 
 def test_parse_port():
@@ -93,3 +94,45 @@ def test_cmd_kill_already_free(capsys):
     cmd_kill(args)
     captured = capsys.readouterr()
     assert "ALREADY FREE" in captured.out
+
+
+def test_direct_port_args(capsys, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["portdock", ":59995"])
+    main()
+    captured = capsys.readouterr()
+    assert "FREE" in captured.out
+
+    monkeypatch.setattr(sys, "argv", ["portdock", "localhost:59995"])
+    main()
+    captured = capsys.readouterr()
+    assert "FREE" in captured.out
+
+
+def test_cmd_wait_timeout(capsys):
+    parser = build_parser()
+    args = parser.parse_args(["wait", "59997", "--open", "--timeout", "0.05", "--interval", "0.01"])
+    with pytest.raises(SystemExit) as exc_info:
+        cmd_wait(args)
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "Timed out" in captured.err
+
+
+def test_cmd_kill_invalid_port(capsys):
+    parser = build_parser()
+    args = parser.parse_args(["kill", "not_a_port"])
+    with pytest.raises(SystemExit) as exc_info:
+        cmd_kill(args)
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "Error:" in captured.err
+
+
+def test_cmd_wait_invalid_port(capsys):
+    parser = build_parser()
+    args = parser.parse_args(["wait", "not_a_port"])
+    with pytest.raises(SystemExit) as exc_info:
+        cmd_wait(args)
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "Error:" in captured.err

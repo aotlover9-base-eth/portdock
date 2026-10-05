@@ -10,7 +10,7 @@ from typing import List, Optional, Set
 import psutil
 
 from .models import KillReport
-from .scanner import find_root_supervisor, is_port_free, scan_listening_ports
+from .scanner import find_root_supervisor, get_pids_for_port, is_port_free, scan_listening_ports
 
 
 def _get_protected_pids() -> Set[int]:
@@ -71,10 +71,14 @@ def terminate_port(
     """
     Terminate process(es) holding the given port and verify release.
     """
+    active_pids = set(get_pids_for_port(port, proto=proto))
     ports = scan_listening_ports(proto_filter=proto)
     matching = [p for p in ports if p.port == port]
+    for m in matching:
+        if m.pid is not None:
+            active_pids.add(m.pid)
 
-    if not matching:
+    if not active_pids:
         # Check if already free
         if is_port_free(port, proto):
             return KillReport(
@@ -100,7 +104,7 @@ def terminate_port(
 
     # Check for root/permission issues
     unresolved_root = [p for p in matching if p.pid is None]
-    if unresolved_root and not any(p.pid is not None for p in matching):
+    if unresolved_root and not active_pids:
         return KillReport(
             port=port,
             pids_targeted=[],
@@ -117,11 +121,9 @@ def terminate_port(
     killed_names: List[str] = []
     all_target_procs: List[psutil.Process] = []
 
-    for m in matching:
-        if m.pid is None:
-            continue
+    for pid in sorted(active_pids):
         try:
-            p = psutil.Process(m.pid)
+            p = psutil.Process(pid)
             all_target_procs.extend(_collect_pids_to_kill(p, kill_tree=kill_tree))
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
@@ -210,7 +212,7 @@ def terminate_port(
         pids_killed=killed_pids,
         killed_process_names=killed_names,
         tree_killed=kill_tree,
-        success=len(killed_pids) > 0,
+        success=freed and (len(killed_pids) > 0 or len(targeted_pids) == 0),
         freed=freed,
         error_message="" if freed else f"Killed processes {killed_pids}, but port {port} socket is still bound (may be in TIME_WAIT).",
     )
