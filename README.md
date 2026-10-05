@@ -3,7 +3,13 @@
 > **Interactive Port Conflict Resolver & Ghost Process Dissector for Linux & macOS**  
 > *Day 6 of 100 Days, 100 Problems, 100 Solutions*
 
-![portdock terminal dashboard](assets/preview.png)
+<div align="center">
+  <img src="assets/day_006_card.jpg" alt="portdock Day 006 Feature Card" width="620" />
+</div>
+
+<div align="center">
+  <img src="assets/preview.png" alt="portdock terminal dashboard" width="620" />
+</div>
 
 ```bash
 # 1-second automated install
