@@ -1,0 +1,69 @@
+<svg width="860" height="152" viewBox="0 0 860 152" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="860" y2="152" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0a0f1d" />
+      <stop offset="50%" stop-color="#111827" />
+      <stop offset="100%" stop-color="#0d1117" />
+    </linearGradient>
+    <linearGradient id="borderGrad" x1="0" y1="0" x2="860" y2="152" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.7" />
+      <stop offset="40%" stop-color="#818cf8" stop-opacity="0.4" />
+      <stop offset="80%" stop-color="#34d399" stop-opacity="0.7" />
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.5" />
+    </linearGradient>
+    <linearGradient id="glowPulse" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#34d399" />
+    </linearGradient>
+    <filter id="shadow" x="-4" y="-4" width="868" height="160" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="10" stdDeviation="15" flood-color="#000000" flood-opacity="0.6" />
+    </filter>
+  </defs>
+
+  <!-- Card Background -->
+  <rect x="2" y="2" width="856" height="148" rx="14" fill="url(#bg)" stroke="url(#borderGrad)" stroke-width="1.5" />
+
+  <!-- Subtle Blueprint Tech Grid -->
+  <path d="M 44 0 L 44 152 M 816 0 L 816 152 M 0 76 L 860 76" stroke="#ffffff" stroke-opacity="0.035" stroke-dasharray="4 4" />
+  <circle cx="44" cy="76" r="2.5" fill="#38bdf8" fill-opacity="0.4" />
+  <circle cx="816" cy="76" r="2.5" fill="#34d399" fill-opacity="0.4" />
+
+  <!-- Day Badge Pill -->
+  <rect x="40" y="22" width="138" height="24" rx="12" fill="#151d2f" stroke="#2563eb" stroke-opacity="0.4" stroke-width="1" />
+  <circle cx="53" cy="34" r="4.5" fill="#10b981" />
+  <circle cx="53" cy="34" r="7.5" stroke="#10b981" stroke-opacity="0.3" stroke-width="1.5" />
+  <text x="67" y="38" fill="#93c5fd" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'JetBrains Mono', monospace" font-size="11" font-weight="700" letter-spacing="1">DAY 006 / 100</text>
+
+  <!-- Vector Lightning Bolt Icon -->
+  <g transform="translate(40, 56) scale(1.15)">
+    <path d="M 14 0 L 2 16 L 11 16 L 8 28 L 22 10 L 13 10 Z" fill="url(#glowPulse)" />
+  </g>
+
+  <!-- Title -->
+  <text x="74" y="85" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'JetBrains Mono', monospace" font-size="34" font-weight="800" letter-spacing="-0.8">
+    portdock
+  </text>
+
+  <!-- Subtitle -->
+  <text x="42" y="122" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13.5" font-weight="500" letter-spacing="0.1">
+    Interactive Port Conflict Resolver &amp; Ghost Process Dissector for Linux &amp; macOS
+  </text>
+
+  <!-- Right Side Telemetry Badges -->
+  <g transform="translate(608, 22)">
+    <!-- Badge 1 -->
+    <rect x="0" y="0" width="212" height="30" rx="7" fill="#0b1329" stroke="#1e3a8a" stroke-width="1" />
+    <circle cx="15" cy="15" r="3.5" fill="#38bdf8" />
+    <text x="27" y="19" fill="#7dd3fc" font-family="-apple-system, BlinkMacSystemFont, 'JetBrains Mono', monospace" font-size="11" font-weight="700" letter-spacing="0.5">&lt;50ms VERIFIED RELEASE</text>
+
+    <!-- Badge 2 -->
+    <rect x="0" y="38" width="212" height="30" rx="7" fill="#06211a" stroke="#065f46" stroke-width="1" />
+    <circle cx="15" cy="53" r="3.5" fill="#34d399" />
+    <text x="27" y="57" fill="#6ee7b7" font-family="-apple-system, BlinkMacSystemFont, 'JetBrains Mono', monospace" font-size="11" font-weight="700" letter-spacing="0.5">ZERO-FLICKER 60FPS TUI</text>
+
+    <!-- Badge 3 -->
+    <rect x="0" y="76" width="212" height="30" rx="7" fill="#1b112c" stroke="#581c87" stroke-width="1" />
+    <circle cx="15" cy="91" r="3.5" fill="#c084fc" />
+    <text x="27" y="95" fill="#d8b4fe" font-family="-apple-system, BlinkMacSystemFont, 'JetBrains Mono', monospace" font-size="11" font-weight="700" letter-spacing="0.5">GHOST TREE KILLER (-t)</text>
+  </g>
+</svg>
