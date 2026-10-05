@@ -3,14 +3,6 @@
 <img src="assets/banner.png" alt="portdock banner" width="860" />
 
 <p align="center">
-  <a href="https://github.com/aotlover9-base-eth/100-days-100-problems-100-solutions"><img src="https://img.shields.io/badge/100_Days-Day_006-8B5CF6?style=for-the-badge&logo=github" alt="Day 6" /></a>
-  <img src="https://img.shields.io/badge/Release-<50ms_Verified-06B6D4?style=for-the-badge" alt="Socket Release" />
-  <img src="https://img.shields.io/badge/TUI-Zero--Flicker_60fps-10B981?style=for-the-badge" alt="Zero-Flicker TUI" />
-  <img src="https://img.shields.io/badge/Tests-27_Passing-3B82F6?style=for-the-badge&logo=pytest" alt="Tests" />
-  <img src="https://img.shields.io/badge/License-MIT-F59E0B?style=for-the-badge" alt="License" />
-</p>
-
-<p align="center">
   <a href="#quickstart"><b>Quickstart</b></a> &nbsp;•&nbsp;
   <a href="#command-cheat-sheet"><b>Command Cheat Sheet</b></a> &nbsp;•&nbsp;
   <a href="#interactive-tui-controls"><b>TUI Controls</b></a> &nbsp;•&nbsp;
