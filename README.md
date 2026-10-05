@@ -1,30 +1,36 @@
-# ⚡ portdock
+# portdock
 
 > **Interactive Port Conflict Resolver & Ghost Process Dissector for Linux & macOS**  
 > *Day 6 of 100 Days, 100 Problems, 100 Solutions*
 
-`portdock` is a high-performance terminal utility and TUI dashboard engineered to inspect, diagnose, and resolve port collisions in milliseconds. Unlike traditional `kill-port` or `lsof -i :PORT | kill` one-liners, `portdock` dissects process supervisor hierarchies (e.g. `npm` -> `nodemon` -> `node`), traces Docker container mappings, and purges resilient ghost worker trees so dev servers don't immediately restart.
+![portdock terminal dashboard](assets/preview.png)
+
+`portdock` is a high-performance terminal utility and interactive TUI engineered to inspect, diagnose, and resolve port collisions in milliseconds. Unlike traditional `kill-port` or `lsof -i :PORT | kill` one-liners, `portdock` dissects process supervisor hierarchies (e.g. `npm` -> `nodemon` -> `node`), traces Docker container mappings, and purges resilient ghost worker trees so dev servers do not resurrect.
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
-- **⚡ Sub-50ms Socket Kill**: Graceful `SIGTERM` with 200ms escalation to `SIGKILL` and kernel socket release verification.
-- **👻 Ghost Process Dissector (`-t, --tree`)**: Climbs the process hierarchy to terminate root supervisors (`nodemon`, `vite`, `cargo-watch`) and all child workers in one sweep.
-- **🖥️ Full Interactive TUI Dashboard**: Real-time terminal UI with memory RSS, CPU %, uptime, bind scopes, and quick-kill shortcuts (`k`, `t`, `d`).
-- **🔍 Deep Port Inspector (`portdock <port>`)**: Inspects any port, displaying bind scope (Local vs Public), process hierarchy, full command lines, and worker trees.
-- **🐳 Docker Mapping Detection**: Identifies whether a port is held by a Docker container (`docker-proxy`) and displays container name and image.
-- **⏱️ Scriptable Automation**: Includes `portdock wait <port>` and `portdock list --json` for CI/CD and deployment healthchecks.
+- **Sub-50ms Socket Kill**: Graceful `SIGTERM` with 200ms escalation to `SIGKILL` and kernel socket release verification.
+- **Ghost Process Dissector (`-t, --tree`)**: Climbs the process hierarchy to terminate root supervisors (`nodemon`, `vite`, `cargo-watch`) and all child workers in one sweep.
+- **Zero-Flicker Interactive TUI**: Atomic in-memory frame rendering over alternate screen buffer (`\x1b[?1049h\x1b[?25l`) with windowed viewport scrolling.
+- **Dev vs System Sockets Toggle (`[Tab]`)**: Clean developer view by default; hides 30+ root OS daemons with instant one-key switching.
+- **Safe Action Confirmation**: Inline verification prompts for `k` (Kill) and `t` (Tree Kill) with `[Enter] Confirm` / `[Esc] Cancel`.
+- **Live Search & Filter (`/` or `f`)**: Real-time filtering by port, process name, or IP with instant table updates.
+- **Deep Port Inspector (`portdock <port>`)**: Inspects any port, displaying bind scope (`[LOCAL]` vs `[PUBLIC]`), process hierarchy, command line, and worker trees.
+- **Docker Mapping Detection**: Identifies whether a port is held by a Docker container (`docker-proxy`) and displays container name and image.
+- **Scriptable Automation**: Includes `portdock wait <port>` and `portdock list --json` for CI/CD and deployment healthchecks.
 
 ---
 
-## 📦 Quick Installation
+## Installation
 
 ### Automated Installer (Recommended)
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aotlover9-base-eth/portdock/main/install.sh | bash
 ```
-Or clone and install locally:
+
+### From Source
 ```bash
 git clone https://github.com/aotlover9-base-eth/portdock.git
 cd portdock
@@ -38,25 +44,27 @@ pip install .
 
 ---
 
-## ⚡ Quick Start & Usage
+## Quick Start & Usage
 
 ### 1. Launch Interactive TUI Dashboard
-Simply run `portdock` in any terminal:
+Run `portdock` without arguments in any terminal:
 ```bash
 portdock
 ```
-#### Keyboard Navigation:
-- `↑` / `↓` or `j` / `k` -> Navigate listening ports
-- `Enter` or `d` -> Dissect / inspect port card & process tree
-- `k` -> Standard kill (terminates target process)
+
+#### Keyboard Shortcuts:
+- `↑ / ↓` or `j / k` -> Navigate listening ports (zero-flicker)
+- `[Tab]` -> Toggle Dev Apps view vs All Ports (including system daemons)
+- `[Enter]` or `d` -> Dissect / inspect port card & process tree
+- `k` -> Standard kill with `[Enter]` confirmation prompt
 - `t` -> Tree kill (terminates parent supervisor + worker tree)
-- `f` -> Filter by port, process name, or IP
+- `/` or `f` -> Live interactive search filter
 - `r` -> Refresh list
-- `q` -> Exit
+- `q` or `Esc` -> Exit
 
 ---
 
-### 2. Fast Command-Line Port Kill
+### 2. Command-Line Port Kill
 
 Terminate a process holding port 3000:
 ```bash
@@ -73,7 +81,7 @@ Ghost Process Killer (Purge supervisor + child worker tree):
 portdock kill 3000 -t
 ```
 
-Immediate Force Kill (`SIGKILL`):
+Immediate Force Kill (`SIGKILL` without graceful escalation):
 ```bash
 portdock kill 3000 -f
 ```
@@ -88,8 +96,9 @@ portdock 3000
 # or
 portdock :8080
 ```
+
 Displays:
-- **Bind Type**: `🔒 Localhost Only (127.0.0.1)` vs `🌐 Public / All Interfaces (0.0.0.0)`
+- **Bind Type**: `[LOCAL] Localhost Only (127.0.0.1)` vs `[PUBLIC] All Interfaces (0.0.0.0)`
 - **Process Metadata**: PID, User, Memory RSS, CPU %, Uptime, Working Directory
 - **Supervisor Hierarchy**: `npm (4990) -> nodemon (4995) -> node (5000)`
 - **Full Process Tree**: Visual branch of all worker threads and child subprocesses
@@ -99,18 +108,20 @@ Displays:
 
 ### 4. Listing Ports & Automation
 
-List all active listening ports:
+List active listening ports:
 ```bash
 portdock list
 ```
 
-Filter by exposure:
+Filter by process type or network exposure:
 ```bash
-portdock list --public    # Only ports exposed to 0.0.0.0 / all interfaces
-portdock list --local     # Only localhost ports (127.0.0.1 / ::1)
+portdock list --apps      # Developer and user applications only (hides OS daemons)
+portdock list --system    # OS background daemons only
+portdock list --public    # Ports exposed to 0.0.0.0 / all interfaces
+portdock list --local     # Localhost-only ports (127.0.0.1 / ::1)
 ```
 
-Export as JSON:
+Export as structured JSON:
 ```bash
 portdock list --json
 ```
@@ -127,16 +138,16 @@ portdock wait 3000 --open --timeout 30
 
 ---
 
-## 🛠️ CLI Reference
+## CLI Reference
 
 ```text
 usage: portdock [-h] [-v] {list,kill,free,wait,dissect,inspect} ...
 
-⚡ portdock - Interactive Port Conflict Resolver & Ghost Process Dissector
+portdock - Interactive Port Conflict Resolver & Ghost Process Dissector
 
 positional arguments:
   {list,kill,free,wait,dissect,inspect}
-    list                List listening ports (--tcp, --udp, --local, --public, --json)
+    list                List listening ports (--apps, --system, --local, --public, --json)
     kill (free)         Terminate process(es) holding specified port(s)
     wait                Wait for a port to be freed or opened (--timeout, --open)
     dissect (inspect)   Deep inspection of a port and its process tree
@@ -154,6 +165,6 @@ Kill Options:
 
 ---
 
-## 🛡️ License
+## License
 
 MIT License. Built for developer productivity.
