@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "portdock"
+version = "0.1.0"
+description = "Interactive Port Conflict Resolver & Ghost Process Dissector (TUI & CLI)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "aotlover9", email = "developer@example.com" }
+]
+keywords = ["networking", "ports", "developer-tools", "process-killer", "tui", "rich", "cli", "eaddrinuse"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Networking",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "psutil>=5.9.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+portdock = "portdock.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/portdock"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
