@@ -1,17 +1,12 @@
+# portdock ⚡
+
+> Interactive terminal port conflict resolver & ghost process dissector. Free stubborn dev ports with sub-50ms verified kernel release.
+
 <div align="center">
-
-<img src="assets/banner.png" alt="portdock banner" width="860" />
-
-<p align="center">
-  <a href="#quickstart"><b>Quickstart</b></a> &nbsp;•&nbsp;
-  <a href="#command-cheat-sheet"><b>Command Cheat Sheet</b></a> &nbsp;•&nbsp;
-  <a href="#interactive-tui-controls"><b>TUI Controls</b></a> &nbsp;•&nbsp;
-  <a href="#under-the-hood-technical-architecture"><b>Architecture</b></a>
-</p>
-
-<img src="assets/preview.png" alt="portdock interactive terminal dashboard" width="860" />
-
+  <img src="assets/preview.png" alt="portdock interactive terminal dashboard" width="860" />
 </div>
+
+---
 
 ## Quickstart
 
